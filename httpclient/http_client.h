@@ -3,7 +3,7 @@
 #include <functional>
 #include "../common/mongoose.h"
 
-// ´Ë´¦±ØĞëÓÃfunctionÀà£¬typedefÔÙºóÃæº¯ÊıÖ¸Õë¸³ÖµÎŞĞ§
+// æ­¤å¤„å¿…é¡»ç”¨functionç±»ï¼Œtypedefå†åé¢å‡½æ•°æŒ‡é’ˆèµ‹å€¼æ— æ•ˆ
 using ReqCallback = std::function<void (std::string)>;
 
 class HttpClient

@@ -4,23 +4,24 @@
 void HttpServer::Init(const std::string &port)
 {
 	m_port = port;
-	s_server_option.enable_directory_listing = "yes";
-	s_server_option.document_root = s_web_dir.c_str();
+	m_listen_on = m_url+":"+port;
+	//s_server_option.enable_directory_listing = "yes";
+	s_server_option.root_dir = s_web_dir.c_str();
 
-	// ÆäËûhttpÉèÖÃ
+	// å…¶ä»–httpè®¾ç½®
 
-	// ¿ªÆô CORS£¬±¾ÏîÖ»Õë¶ÔÖ÷Ò³¼ÓÔØÓÐÐ§
+	// å¼€å¯ CORSï¼Œæœ¬é¡¹åªé’ˆå¯¹ä¸»é¡µåŠ è½½æœ‰æ•ˆ
 	// s_server_option.extra_headers = "Access-Control-Allow-Origin: *";
 }
 
 bool HttpServer::Start()
 {
-	mg_mgr_init(&m_mgr, NULL);
-	mg_connection *connection = mg_bind(&m_mgr, m_port.c_str(), HttpServer::OnHttpWebsocketEvent);
+	mg_mgr_init(&m_mgr);
+	mg_connection *connection = mg_http_listen(&m_mgr, m_listen_on.c_str(), HttpServer::OnHttpWebsocketEvent, nullptr);
 	if (connection == NULL)
 		return false;
 	// for both http and websocket
-	mg_set_protocol_http_websocket(connection);
+	//mg_set_protocol_http_websocket(connection);
 
 	printf("starting http server at port: %s\n", m_port.c_str());
 	// loop
@@ -30,32 +31,37 @@ bool HttpServer::Start()
 	return true;
 }
 
-void HttpServer::OnHttpWebsocketEvent(mg_connection *connection, int event_type, void *event_data)
+void HttpServer::OnHttpWebsocketEvent(mg_connection *connection, int event_type, void *event_data, void *fn_data)
 {
-	// Çø·ÖhttpºÍwebsocket
-	if (event_type == MG_EV_HTTP_REQUEST)
+	// åŒºåˆ†httpå’Œwebsocket
+	if (event_type == MG_EV_HTTP_MSG)
 	{
-		http_message *http_req = (http_message *)event_data;
+		mg_http_message *http_req = (mg_http_message *)event_data;
 		HandleHttpEvent(connection, http_req);
 	}
-	else if (event_type == MG_EV_WEBSOCKET_HANDSHAKE_DONE ||
-		     event_type == MG_EV_WEBSOCKET_FRAME ||
+	else if (event_type == MG_EV_WS_MSG ||
+		     event_type == MG_EV_WS_CTL ||
+			 event_type == MG_EV_WS_OPEN ||
 		     event_type == MG_EV_CLOSE)
 	{
-		websocket_message *ws_message = (struct websocket_message *)event_data;
-		HandleWebsocketMessage(connection, event_type, ws_message);
+		if(connection->is_websocket != 1){
+			mg_ws_upgrade(connection, (mg_http_message *)event_data, nullptr);
+		}else{
+			mg_ws_message *ws_message = (mg_ws_message *)event_data;
+			HandleWebsocketMessage(connection, event_type, ws_message);
+		}
 	}
 }
 
 // ---- simple http ---- //
-static bool route_check(http_message *http_msg, char *route_prefix)
+static bool route_check(mg_http_message *http_msg, char *route_prefix)
 {
 	if (mg_vcmp(&http_msg->uri, route_prefix) == 0)
 		return true;
 	else
 		return false;
 
-	// TODO: »¹¿ÉÒÔÅÐ¶Ï GET, POST, PUT, DELTEµÈ·½·¨
+	// TODO: è¿˜å¯ä»¥åˆ¤æ–­ GET, POST, PUT, DELTEç­‰æ–¹æ³•
 	//mg_vcmp(&http_msg->method, "GET");
 	//mg_vcmp(&http_msg->method, "POST");
 	//mg_vcmp(&http_msg->method, "PUT");
@@ -79,15 +85,15 @@ void HttpServer::RemoveHandler(const std::string &url)
 
 void HttpServer::SendHttpRsp(mg_connection *connection, std::string rsp)
 {
-	// --- Î´¿ªÆôCORS
-	// ±ØÐëÏÈ·¢ËÍheader, ÔÝÊ±»¹²»ÄÜÓÃHTTP/2.0
+	// --- æœªå¼€å¯CORS
+	// å¿…é¡»å…ˆå‘é€header, æš‚æ—¶è¿˜ä¸èƒ½ç”¨HTTP/2.0
 	mg_printf(connection, "%s", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
-	// ÒÔjsonÐÎÊ½·µ»Ø
+	// ä»¥jsonå½¢å¼è¿”å›ž
 	mg_printf_http_chunk(connection, "{ \"result\": %s }", rsp.c_str());
-	// ·¢ËÍ¿Õ°××Ö·û¿ì£¬½áÊøµ±Ç°ÏìÓ¦
+	// å‘é€ç©ºç™½å­—ç¬¦å¿«ï¼Œç»“æŸå½“å‰å“åº”
 	mg_send_http_chunk(connection, "", 0);
 
-	// --- ¿ªÆôCORS
+	// --- å¼€å¯CORS
 	/*mg_printf(connection, "HTTP/1.1 200 OK\r\n"
 			  "Content-Type: text/plain\n"
 			  "Cache-Control: no-cache\n"
@@ -96,12 +102,12 @@ void HttpServer::SendHttpRsp(mg_connection *connection, std::string rsp)
 			  "%s\n", rsp.length(), rsp.c_str()); */
 }
 
-void HttpServer::HandleHttpEvent(mg_connection *connection, http_message *http_req)
+void HttpServer::HandleHttpEvent(mg_connection *connection, mg_http_message *http_req)
 {
 	std::string req_str = std::string(http_req->message.p, http_req->message.len);
 	printf("got request: %s\n", req_str.c_str());
 
-	// ÏÈ¹ýÂËÊÇ·ñÒÑ×¢²áµÄº¯Êý»Øµ÷
+	// å…ˆè¿‡æ»¤æ˜¯å¦å·²æ³¨å†Œçš„å‡½æ•°å›žè°ƒ
 	std::string url = std::string(http_req->uri.p, http_req->uri.len);
 	std::string body = std::string(http_req->body.p, http_req->body.len);
 	auto it = s_handler_map.find(url);
@@ -111,17 +117,17 @@ void HttpServer::HandleHttpEvent(mg_connection *connection, http_message *http_r
 		handle_func(url, body, connection, &HttpServer::SendHttpRsp);
 	}
 
-	// ÆäËûÇëÇó
+	// å…¶ä»–è¯·æ±‚
 	if (route_check(http_req, "/")) // index page
 		mg_serve_http(connection, http_req, s_server_option);
 	else if (route_check(http_req, "/api/hello")) 
 	{
-		// Ö±½Ó»Ø´«
+		// ç›´æŽ¥å›žä¼ 
 		SendHttpRsp(connection, "welcome to httpserver");
 	}
 	else if (route_check(http_req, "/api/sum"))
 	{
-		// ¼òµ¥postÇëÇó£¬¼Ó·¨ÔËËã²âÊÔ
+		// ç®€å•postè¯·æ±‚ï¼ŒåŠ æ³•è¿ç®—æµ‹è¯•
 		char n1[100], n2[100];
 		double result;
 
@@ -144,30 +150,40 @@ void HttpServer::HandleHttpEvent(mg_connection *connection, http_message *http_r
 }
 
 // ---- websocket ---- //
-int HttpServer::isWebsocket(const mg_connection *connection)
-{
-	return connection->flags & MG_F_IS_WEBSOCKET;
-}
+// int HttpServer::isWebsocket(const mg_connection *connection)
+// {
+// 	return connection->flags & MG_F_IS_WEBSOCKET;
+// }
 
-void HttpServer::HandleWebsocketMessage(mg_connection *connection, int event_type, websocket_message *ws_msg)
+void HttpServer::HandleWebsocketMessage(mg_connection *connection, int event_type, mg_ws_message *ws_msg)
 {
-	if (event_type == MG_EV_WEBSOCKET_HANDSHAKE_DONE)
+	if (event_type == MG_EV_WS_OPEN)
 	{
 		printf("client websocket connected\n");
-		// »ñÈ¡Á¬½Ó¿Í»§¶ËµÄIPºÍ¶Ë¿Ú
-		char addr[32];
-		mg_sock_addr_to_str(&connection->sa, addr, sizeof(addr), MG_SOCK_STRINGIFY_IP | MG_SOCK_STRINGIFY_PORT);
-		printf("client addr: %s\n", addr);
+		// èŽ·å–è¿žæŽ¥å®¢æˆ·ç«¯çš„IPå’Œç«¯å£
+		//char addr[32];
+		//mg_sock_addr_to_str(&connection->sa, addr, sizeof(addr), MG_SOCK_STRINGIFY_IP | MG_SOCK_STRINGIFY_PORT);
+		if(connection->peer.ip && connection->peer.port){
+			BYTE ip_addr[4], ip_port[2];
+			memcpy(ip_addr, (const void*)(connection->peer.ip+3), 1);
+			memcpy(ip_port+1, (const void*)(connection->peer.port+2), 1);
+			memcpy(ip_port+2, (const void*)(connection->peer.port+1), 1);
+			memcpy(ip_port+3, (const void*)(connection->peer.port), 1);
+			memcpy(ip_port, (const void*)(connection->peer.port+1), 1);
+			memcpy(ip_port+1, (const void*)(connection->peer.port), 1);
+			printf("client addr: %d.%d.%d.%d:%d\n", (INT8)ip_addr[0],(INT8)ip_addr[1],(INT8)ip_addr[2],(INT8)ip_addr[4],(INT16)ip_port);
+		}
+		
 
-		// Ìí¼Ó session
+		// æ·»åŠ  session
 		s_websocket_session_set.insert(connection);
 
 		SendWebsocketMsg(connection, "client websocket connected");
 	}
-	else if (event_type == MG_EV_WEBSOCKET_FRAME)
+	else if (event_type == MG_EV_WS_MSG)
 	{
 		mg_str received_msg = {
-			(char *)ws_msg->data, ws_msg->size
+			(char *)ws_msg->data.ptr, ws_msg->data.len;
 		};
 
 		char buff[1024] = {0};
@@ -180,10 +196,10 @@ void HttpServer::HandleWebsocketMessage(mg_connection *connection, int event_typ
 	}
 	else if (event_type == MG_EV_CLOSE)
 	{
-		if (isWebsocket(connection))
+		if (connection->is_websocket)
 		{
 			printf("client websocket closed\n");
-			// ÒÆ³ýsession
+			// ç§»é™¤session
 			if (s_websocket_session_set.find(connection) != s_websocket_session_set.end())
 				s_websocket_session_set.erase(connection);
 		}
@@ -192,13 +208,13 @@ void HttpServer::HandleWebsocketMessage(mg_connection *connection, int event_typ
 
 void HttpServer::SendWebsocketMsg(mg_connection *connection, std::string msg)
 {
-	mg_send_websocket_frame(connection, WEBSOCKET_OP_TEXT, msg.c_str(), strlen(msg.c_str()));
+	mg_ws_send(connection, msg.c_str(), strlen(msg.c_str()), WEBSOCKET_OP_TEXT);
 }
 
 void HttpServer::BroadcastWebsocketMsg(std::string msg)
 {
 	for (mg_connection *connection : s_websocket_session_set)
-		mg_send_websocket_frame(connection, WEBSOCKET_OP_TEXT, msg.c_str(), strlen(msg.c_str()));
+		mg_ws_send(connection, msg.c_str(), strlen(msg.c_str()),WEBSOCKET_OP_TEXT);
 }
 
 bool HttpServer::Close()

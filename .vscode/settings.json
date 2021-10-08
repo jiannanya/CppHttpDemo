@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "unordered_set": "cpp",
+        "functional": "cpp",
+        "list": "cpp",
+        "type_traits": "cpp",
+        "vector": "cpp",
+        "xhash": "cpp",
+        "xlocale": "cpp",
+        "xstring": "cpp",
+        "xutility": "cpp"
+    }
+}

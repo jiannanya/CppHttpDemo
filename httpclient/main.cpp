@@ -9,7 +9,7 @@ void handle_func(std::string rsp)
 
 int main()
 {
-	// 拼完整url，带参数
+	// 鎷煎畬鏁磚rl锛屽甫鍙傛暟
 	std::string url1 = "http://127.0.0.1:7999/api/hello";
 	HttpClient::SendReq(url1, handle_func);
 	
