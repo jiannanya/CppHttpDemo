@@ -85,13 +85,14 @@ void HttpServer::RemoveHandler(const std::string &url)
 
 void HttpServer::SendHttpRsp(mg_connection *connection, std::string rsp)
 {
+	mg_http_reply(connection, 200,"","{ \"result\": %s }", rsp.c_str());
 	// --- 未开启CORS
 	// 必须先发送header, 暂时还不能用HTTP/2.0
-	mg_printf(connection, "%s", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
+	//mg_printf(connection, "%s", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
 	// 以json形式返回
-	mg_printf_http_chunk(connection, "{ \"result\": %s }", rsp.c_str());
+	//mg_http_printf_chunk(connection, "{ \"result\": %s }", rsp.c_str());
 	// 发送空白字符快，结束当前响应
-	mg_send_http_chunk(connection, "", 0);
+	//mg_send_http_chunk(connection, "", 0);
 
 	// --- 开启CORS
 	/*mg_printf(connection, "HTTP/1.1 200 OK\r\n"
@@ -104,12 +105,12 @@ void HttpServer::SendHttpRsp(mg_connection *connection, std::string rsp)
 
 void HttpServer::HandleHttpEvent(mg_connection *connection, mg_http_message *http_req)
 {
-	std::string req_str = std::string(http_req->message.p, http_req->message.len);
+	std::string req_str = std::string(http_req->message.ptr, http_req->message.len);
 	printf("got request: %s\n", req_str.c_str());
 
 	// 先过滤是否已注册的函数回调
-	std::string url = std::string(http_req->uri.p, http_req->uri.len);
-	std::string body = std::string(http_req->body.p, http_req->body.len);
+	std::string url = std::string(http_req->uri.ptr, http_req->uri.len);
+	std::string body = std::string(http_req->body.ptr, http_req->body.len);
 	auto it = s_handler_map.find(url);
 	if (it != s_handler_map.end())
 	{
@@ -119,7 +120,7 @@ void HttpServer::HandleHttpEvent(mg_connection *connection, mg_http_message *htt
 
 	// 其他请求
 	if (route_check(http_req, "/")) // index page
-		mg_serve_http(connection, http_req, s_server_option);
+		mg_http_serve_dir(connection, http_req, &s_server_option);
 	else if (route_check(http_req, "/api/hello")) 
 	{
 		// 直接回传
@@ -132,8 +133,8 @@ void HttpServer::HandleHttpEvent(mg_connection *connection, mg_http_message *htt
 		double result;
 
 		/* Get form variables */
-		mg_get_http_var(&http_req->body, "n1", n1, sizeof(n1));
-		mg_get_http_var(&http_req->body, "n2", n2, sizeof(n2));
+		mg_http_get_var(&http_req->body, "n1", n1, sizeof(n1));
+		mg_http_get_var(&http_req->body, "n2", n2, sizeof(n2));
 
 		/* Compute the result and send it back as a JSON object */
 		result = strtod(n1, NULL) + strtod(n2, NULL);
@@ -183,11 +184,11 @@ void HttpServer::HandleWebsocketMessage(mg_connection *connection, int event_typ
 	else if (event_type == MG_EV_WS_MSG)
 	{
 		mg_str received_msg = {
-			(char *)ws_msg->data.ptr, ws_msg->data.len;
+			(char *)ws_msg->data.ptr, ws_msg->data.len
 		};
 
 		char buff[1024] = {0};
-		strncpy(buff, received_msg.p, received_msg.len); // must use strncpy, specifiy memory pointer and length
+		strncpy(buff, received_msg.ptr, received_msg.len); // must use strncpy, specifiy memory pointer and length
 
 		// do sth to process request
 		printf("received msg: %s\n", buff);

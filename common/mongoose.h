@@ -439,6 +439,8 @@ struct timeval {
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
+#include <winerror.h>
+//#include <corecrt_wstring.h>
 
 #if defined(_MSC_VER) && _MSC_VER < 1700
 #define __func__ ""

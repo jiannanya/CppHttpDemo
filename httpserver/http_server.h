@@ -16,7 +16,7 @@ class HttpServer
 {
 public:
 	HttpServer() {
-		url_listen_on = "http://localhost"
+		m_url = "http://localhost";
 	}
 	~HttpServer() {}
 	void Init(const std::string &port); // 初始化设置
@@ -42,7 +42,8 @@ private:
 	static std::unordered_set<mg_connection *> s_websocket_session_set; // 缓存websocket连接
 
 	std::string m_port;    // 端口
-	std::string url_listen_on;
+	std::string m_url;
+	std::string m_listen_on;
 	mg_mgr m_mgr;          // 连接管理器
 };
 
