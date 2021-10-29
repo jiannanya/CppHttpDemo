@@ -5,3 +5,4 @@ g++  -g common/mongoose.c  httpserver/http_server.cpp httpserver/main.cpp -o mai
 clang  common/mongoose.c  httpserver/http_server.cpp httpserver/main.cpp -o main.exe -fpermissive -lwsock32
  
 
+g++  -g common/mongoose.c  httpserver/http_server.cpp httpserver/main.cpp -o main.exe -fpermissive -lwsock32
