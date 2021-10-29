@@ -34,6 +34,11 @@ bool handle_fun2(std::string url, std::string body, mg_connection *c, OnRspCallb
 
 int main(int argc, char *argv[]) 
 {
+
+	//add some comments for git test
+	int test;
+	int test2;
+	//  
 	std::string port = "7999";
 	auto http_server = std::shared_ptr<HttpServer>(new HttpServer);
 	http_server->Init(port);
